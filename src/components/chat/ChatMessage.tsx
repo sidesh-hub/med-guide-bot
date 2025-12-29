@@ -1,13 +1,5 @@
 import { Pill, Clock, AlertTriangle, Info, User, Bot } from "lucide-react";
-
-interface MedicineInfo {
-  name: string;
-  description: string;
-  howToUse: string;
-  whenToUse: string;
-  sideEffects: string;
-  warnings: string;
-}
+import { MedicineInfo } from "@/services/medicineApi";
 
 interface ChatMessageProps {
   message: string;
