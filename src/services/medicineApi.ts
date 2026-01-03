@@ -30,14 +30,81 @@ interface OpenFDAResponse {
   };
 }
 
+// Common name mappings (international names to US names)
+const drugNameMappings: Record<string, string[]> = {
+  paracetamol: ["acetaminophen", "tylenol"],
+  panadol: ["acetaminophen", "tylenol"],
+  acetaminophen: ["tylenol", "acetaminophen"],
+  ibuprofen: ["advil", "motrin", "ibuprofen"],
+  aspirin: ["aspirin", "bayer"],
+  diclofenac: ["voltaren", "diclofenac"],
+  omeprazole: ["prilosec", "omeprazole"],
+  metformin: ["glucophage", "metformin"],
+  amoxicillin: ["amoxil", "amoxicillin"],
+  azithromycin: ["zithromax", "z-pak", "azithromycin"],
+  lisinopril: ["zestril", "prinivil", "lisinopril"],
+  atorvastatin: ["lipitor", "atorvastatin"],
+  simvastatin: ["zocor", "simvastatin"],
+  metoprolol: ["lopressor", "metoprolol"],
+  amlodipine: ["norvasc", "amlodipine"],
+  losartan: ["cozaar", "losartan"],
+  gabapentin: ["neurontin", "gabapentin"],
+  sertraline: ["zoloft", "sertraline"],
+  fluoxetine: ["prozac", "fluoxetine"],
+  escitalopram: ["lexapro", "escitalopram"],
+  cetirizine: ["zyrtec", "cetirizine"],
+  loratadine: ["claritin", "loratadine"],
+  diphenhydramine: ["benadryl", "diphenhydramine"],
+  ranitidine: ["zantac", "ranitidine"],
+  pantoprazole: ["protonix", "pantoprazole"],
+  prednisone: ["deltasone", "prednisone"],
+  albuterol: ["ventolin", "proair", "albuterol"],
+  montelukast: ["singulair", "montelukast"],
+  levothyroxine: ["synthroid", "levothyroxine"],
+  warfarin: ["coumadin", "warfarin"],
+  clopidogrel: ["plavix", "clopidogrel"],
+  tramadol: ["ultram", "tramadol"],
+  naproxen: ["aleve", "naprosyn", "naproxen"],
+  hydrocodone: ["vicodin", "norco", "hydrocodone"],
+  oxycodone: ["oxycontin", "percocet", "oxycodone"],
+  cyclobenzaprine: ["flexeril", "cyclobenzaprine"],
+  meloxicam: ["mobic", "meloxicam"],
+  duloxetine: ["cymbalta", "duloxetine"],
+  venlafaxine: ["effexor", "venlafaxine"],
+  bupropion: ["wellbutrin", "bupropion"],
+  trazodone: ["desyrel", "trazodone"],
+  alprazolam: ["xanax", "alprazolam"],
+  lorazepam: ["ativan", "lorazepam"],
+  clonazepam: ["klonopin", "clonazepam"],
+  zolpidem: ["ambien", "zolpidem"],
+};
+
+const getSearchTerms = (query: string): string[] => {
+  const lowerQuery = query.toLowerCase().trim();
+  const terms = [lowerQuery];
+  
+  // Add mapped alternatives
+  if (drugNameMappings[lowerQuery]) {
+    terms.push(...drugNameMappings[lowerQuery]);
+  }
+  
+  // Check if query matches any mapping value
+  for (const [key, values] of Object.entries(drugNameMappings)) {
+    if (values.some(v => v.toLowerCase() === lowerQuery)) {
+      terms.push(key, ...values);
+    }
+  }
+  
+  return [...new Set(terms)];
+};
+
 const cleanText = (text: string | undefined): string => {
   if (!text) return "";
-  // Remove excessive whitespace and clean up the text
   return text
     .replace(/\s+/g, " ")
     .replace(/•/g, "\n• ")
     .trim()
-    .slice(0, 500); // Limit length for readability
+    .slice(0, 500);
 };
 
 const extractFirstParagraph = (text: string | undefined, maxLength: number = 300): string => {
@@ -45,7 +112,6 @@ const extractFirstParagraph = (text: string | undefined, maxLength: number = 300
   const cleaned = cleanText(text);
   if (cleaned.length <= maxLength) return cleaned;
   
-  // Try to cut at a sentence boundary
   const truncated = cleaned.slice(0, maxLength);
   const lastPeriod = truncated.lastIndexOf(".");
   if (lastPeriod > maxLength * 0.5) {
@@ -55,33 +121,48 @@ const extractFirstParagraph = (text: string | undefined, maxLength: number = 300
 };
 
 export const searchMedicine = async (query: string): Promise<MedicineInfo | null> => {
-  try {
-    // Search by brand name or generic name
-    const searchTerm = encodeURIComponent(query.toLowerCase());
-    const url = `https://api.fda.gov/drug/label.json?search=(openfda.brand_name:"${searchTerm}"+openfda.generic_name:"${searchTerm}")&limit=1`;
-    
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      // Try a broader search if exact match fails
+  const searchTerms = getSearchTerms(query);
+  
+  for (const term of searchTerms) {
+    try {
+      const searchTerm = encodeURIComponent(term);
+      
+      // Try exact match first
+      const exactUrl = `https://api.fda.gov/drug/label.json?search=(openfda.brand_name:"${searchTerm}"+openfda.generic_name:"${searchTerm}")&limit=1`;
+      const exactResponse = await fetch(exactUrl);
+      
+      if (exactResponse.ok) {
+        const data: OpenFDAResponse = await exactResponse.json();
+        const result = parseOpenFDAResult(data, query);
+        if (result) return result;
+      }
+      
+      // Try broader search
       const broadUrl = `https://api.fda.gov/drug/label.json?search=openfda.brand_name:${searchTerm}+openfda.generic_name:${searchTerm}&limit=1`;
       const broadResponse = await fetch(broadUrl);
       
-      if (!broadResponse.ok) {
-        return null;
+      if (broadResponse.ok) {
+        const data: OpenFDAResponse = await broadResponse.json();
+        const result = parseOpenFDAResult(data, query);
+        if (result) return result;
       }
       
-      const broadData: OpenFDAResponse = await broadResponse.json();
-      return parseOpenFDAResult(broadData, query);
+      // Try searching in substance name
+      const substanceUrl = `https://api.fda.gov/drug/label.json?search=openfda.substance_name:${searchTerm}&limit=1`;
+      const substanceResponse = await fetch(substanceUrl);
+      
+      if (substanceResponse.ok) {
+        const data: OpenFDAResponse = await substanceResponse.json();
+        const result = parseOpenFDAResult(data, query);
+        if (result) return result;
+      }
+      
+    } catch (error) {
+      console.error(`Error searching for ${term}:`, error);
     }
-    
-    const data: OpenFDAResponse = await response.json();
-    return parseOpenFDAResult(data, query);
-    
-  } catch (error) {
-    console.error("Error fetching medicine data:", error);
-    return null;
   }
+  
+  return null;
 };
 
 const parseOpenFDAResult = (data: OpenFDAResponse, originalQuery: string): MedicineInfo | null => {
