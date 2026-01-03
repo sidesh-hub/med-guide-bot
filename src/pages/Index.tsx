@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Pill, Sparkles, Database } from "lucide-react";
+import { Pill, Sparkles } from "lucide-react";
 import ChatMessage from "@/components/chat/ChatMessage";
 import ChatInput from "@/components/chat/ChatInput";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import SuggestionChips from "@/components/chat/SuggestionChips";
-import { searchMedicine, MedicineInfo } from "@/services/medicineApi";
-import { useToast } from "@/hooks/use-toast";
+import { getMedicineInfo, MedicineInfo } from "@/data/medicineDatabase";
 
 interface Message {
   id: string;
@@ -14,13 +13,12 @@ interface Message {
   medicineInfo?: MedicineInfo;
 }
 
-const suggestions = ["Aspirin", "Ibuprofen", "Tylenol", "Advil", "Benadryl"];
+const suggestions = ["Paracetamol", "Ibuprofen", "Aspirin", "Amoxicillin", "Omeprazole"];
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -40,42 +38,22 @@ const Index = () => {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
-    try {
-      const medicineInfo = await searchMedicine(text);
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 1200));
 
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: medicineInfo
-          ? `Here's the information about ${medicineInfo.name}:`
-          : `I couldn't find specific information about "${text}" in the FDA database. This could mean:
-          
-• The medicine might be spelled differently
-• It may not be available in the US market
-• Try searching with the generic name instead of brand name
+    const medicineInfo = getMedicineInfo(text);
 
-Please try another medicine name or check the spelling.`,
-        isUser: false,
-        medicineInfo: medicineInfo || undefined,
-      };
+    const botMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      text: medicineInfo
+        ? `Here's the information about ${medicineInfo.name}:`
+        : `I couldn't find specific information about "${text}". Please try searching for common medicines like Paracetamol, Ibuprofen, Aspirin, Amoxicillin, or Omeprazole. You can also ask me general questions about medicine usage.`,
+      isUser: false,
+      medicineInfo: medicineInfo || undefined,
+    };
 
-      setMessages((prev) => [...prev, botMessage]);
-    } catch (error) {
-      console.error("Error:", error);
-      toast({
-        title: "Connection Error",
-        description: "Unable to fetch medicine data. Please try again.",
-        variant: "destructive",
-      });
-      
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: "Sorry, I'm having trouble connecting to the medicine database. Please try again in a moment.",
-        isUser: false,
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+    setMessages((prev) => [...prev, botMessage]);
+    setIsLoading(false);
   };
 
   return (
@@ -83,19 +61,13 @@ Please try another medicine name or check the spelling.`,
       {/* Header */}
       <header className="sticky top-0 z-10 bg-card/80 backdrop-blur-lg border-b border-border">
         <div className="max-w-3xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-glow">
-                <Pill className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold text-foreground">MediGuide</h1>
-                <p className="text-xs text-muted-foreground">Your trusted medicine information assistant</p>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-glow">
+              <Pill className="w-5 h-5 text-primary-foreground" />
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-accent/50 px-2.5 py-1.5 rounded-full">
-              <Database className="w-3 h-3" />
-              <span>Powered by OpenFDA</span>
+            <div>
+              <h1 className="text-lg font-semibold text-foreground">MediGuide</h1>
+              <p className="text-xs text-muted-foreground">Your trusted medicine information assistant</p>
             </div>
           </div>
         </div>
@@ -113,7 +85,7 @@ Please try another medicine name or check the spelling.`,
                 <div className="space-y-2">
                   <h2 className="text-2xl font-semibold text-foreground">Welcome to MediGuide</h2>
                   <p className="text-muted-foreground max-w-md">
-                    Search any medicine from the FDA database to learn what it is, how to use it, when to take it, and important safety information.
+                    Ask me about any medicine to learn what it is, how to use it, when to take it, and important safety information.
                   </p>
                 </div>
               </div>
@@ -125,7 +97,7 @@ Please try another medicine name or check the spelling.`,
 
               <div className="bg-accent/50 rounded-xl p-4 max-w-md border border-border">
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  <strong className="text-accent-foreground">Disclaimer:</strong> This chatbot uses the OpenFDA database for general information only and is not a substitute for professional medical advice. Always consult a healthcare provider before taking any medication.
+                  <strong className="text-accent-foreground">Disclaimer:</strong> This chatbot provides general information only and is not a substitute for professional medical advice. Always consult a healthcare provider before taking any medication.
                 </p>
               </div>
             </div>
@@ -151,7 +123,7 @@ Please try another medicine name or check the spelling.`,
         <div className="max-w-3xl mx-auto px-4 py-4">
           <ChatInput onSend={handleSend} isLoading={isLoading} />
           <p className="text-xs text-center text-muted-foreground mt-3">
-            Data from FDA • Always verify with a healthcare professional
+            Always verify medication information with a healthcare professional
           </p>
         </div>
       </footer>
